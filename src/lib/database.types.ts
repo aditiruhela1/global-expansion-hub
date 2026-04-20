@@ -1,5 +1,5 @@
 // Hand-written types matching the SQL schema in /supabase/migrations.
-// Keep in sync if you add columns.
+// Shape mirrors what `supabase gen types typescript` produces.
 
 export type AppRole = "admin" | "user";
 export type ChecklistCategory = "tax" | "payments" | "shipping" | "legal";
@@ -44,7 +44,7 @@ export interface ChecklistItem {
 export interface PaymentProvider {
   id: string;
   user_id: string;
-  provider: string; // e.g. 'stripe' | 'paypal' | 'wise' | custom
+  provider: string;
   display_name: string;
   description: string | null;
   connected: boolean;
@@ -67,43 +67,81 @@ export interface UserRole {
   role: AppRole;
 }
 
-export interface Database {
+export type Json = string | number | boolean | null | { [k: string]: Json } | Json[];
+
+export type Database = {
   public: {
     Tables: {
-      profiles: { Row: Profile; Insert: Partial<Profile> & { id: string }; Update: Partial<Profile> };
+      profiles: {
+        Row: Profile;
+        Insert: Partial<Profile> & { id: string };
+        Update: Partial<Profile>;
+        Relationships: [];
+      };
       businesses: {
         Row: Business;
-        Insert: Omit<Business, "id" | "created_at" | "updated_at"> & { id?: string };
+        Insert: Omit<Business, "id" | "created_at" | "updated_at"> & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
         Update: Partial<Business>;
+        Relationships: [];
       };
       expansion_plans: {
         Row: ExpansionPlan;
-        Insert: Omit<ExpansionPlan, "id" | "created_at"> & { id?: string };
+        Insert: Omit<ExpansionPlan, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
         Update: Partial<ExpansionPlan>;
+        Relationships: [];
       };
       checklist_items: {
         Row: ChecklistItem;
-        Insert: Omit<ChecklistItem, "id" | "created_at"> & { id?: string };
+        Insert: Omit<ChecklistItem, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
         Update: Partial<ChecklistItem>;
+        Relationships: [];
       };
       payment_providers: {
         Row: PaymentProvider;
-        Insert: Omit<PaymentProvider, "id" | "created_at"> & { id?: string };
+        Insert: Omit<PaymentProvider, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
         Update: Partial<PaymentProvider>;
+        Relationships: [];
       };
       fulfillment_carriers: {
         Row: FulfillmentCarrier;
-        Insert: Omit<FulfillmentCarrier, "id" | "created_at"> & { id?: string };
+        Insert: Omit<FulfillmentCarrier, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
         Update: Partial<FulfillmentCarrier>;
+        Relationships: [];
       };
       user_roles: {
         Row: UserRole;
         Insert: Omit<UserRole, "id"> & { id?: string };
         Update: Partial<UserRole>;
+        Relationships: [];
       };
     };
+    Views: Record<string, never>;
     Functions: {
-      has_role: { Args: { _user_id: string; _role: AppRole }; Returns: boolean };
+      has_role: {
+        Args: { _user_id: string; _role: AppRole };
+        Returns: boolean;
+      };
     };
+    Enums: {
+      app_role: AppRole;
+      checklist_category: ChecklistCategory;
+    };
+    CompositeTypes: Record<string, never>;
   };
-}
+};
