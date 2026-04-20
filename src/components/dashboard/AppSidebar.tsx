@@ -68,7 +68,7 @@ export function AppSidebar() {
       <SidebarFooter className="border-t border-sidebar-border p-3">
         {!collapsed && user && (
           <div className="mb-2 truncate px-2 text-xs">
-            <div className="truncate font-medium">{user.fullName}</div>
+            <div className="truncate font-medium">{(user.user_metadata as { full_name?: string })?.full_name ?? user.email}</div>
             <div className="truncate text-muted-foreground">{user.email}</div>
           </div>
         )}
