@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Trash2, CheckCircle2, Circle } from "lucide-react";
+import { Plus, Trash2, CheckCircle2, Circle, Search } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,11 +11,17 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { COUNTRIES } from "@/utils/countries";
-import { createPlan, deletePlan, getPlans, toggleChecklistItem } from "@/services/api";
-import type { ExpansionPlan } from "@/utils/types";
+import {
+  createPlan,
+  deletePlan,
+  listPlans,
+  toggleChecklistItem,
+  type PlanWithItems,
+} from "@/services/plans";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -26,35 +33,74 @@ const categoryColor: Record<string, string> = {
 };
 
 export default function Plans() {
-  const [plans, setPlans] = useState<ExpansionPlan[]>([]);
+  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [country, setCountry] = useState(COUNTRIES[0].name);
+  const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    setPlans(getPlans());
-    document.title = "Expansion Plans — GlobeNest";
-  }, []);
+  useEffect(() => { document.title = "Expansion Plans — GlobeNest"; }, []);
 
-  async function handleCreate() {
+  const { data: plans = [], isLoading } = useQuery({
+    queryKey: ["plans"],
+    queryFn: listPlans,
+  });
+
+  const filtered = useMemo(
+    () =>
+      search
+        ? plans.filter((p) => p.country.toLowerCase().includes(search.toLowerCase()))
+        : plans,
+    [plans, search],
+  );
+
+  const create = useMutation({
+    mutationFn: (c: string) => createPlan(c),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["plans"] });
+      setOpen(false);
+      toast.success(`Plan created for ${country}`);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: string) => deletePlan(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["plans"] });
+      toast.success("Plan removed.");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const toggle = useMutation({
+    mutationFn: ({ itemId, done }: { itemId: string; done: boolean }) =>
+      toggleChecklistItem(itemId, done),
+    onMutate: async ({ itemId, done }) => {
+      await qc.cancelQueries({ queryKey: ["plans"] });
+      const prev = qc.getQueryData<PlanWithItems[]>(["plans"]);
+      qc.setQueryData<PlanWithItems[]>(["plans"], (old) =>
+        old?.map((p) => ({
+          ...p,
+          checklist_items: p.checklist_items.map((i) =>
+            i.id === itemId ? { ...i, done } : i,
+          ),
+        })),
+      );
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["plans"], ctx.prev);
+      toast.error("Failed to update item.");
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["plans"] }),
+  });
+
+  function handleCreate() {
     if (plans.some((p) => p.country === country)) {
       toast.error("You already have a plan for this country.");
       return;
     }
-    await createPlan(country);
-    setPlans(getPlans());
-    setOpen(false);
-    toast.success(`Plan created for ${country}`);
-  }
-
-  async function handleDelete(id: string) {
-    await deletePlan(id);
-    setPlans(getPlans());
-    toast.success("Plan removed.");
-  }
-
-  async function handleToggle(planId: string, itemId: string) {
-    const next = await toggleChecklistItem(planId, itemId);
-    setPlans(next);
+    create.mutate(country);
   }
 
   return (
@@ -88,19 +134,42 @@ export default function Plans() {
               </select>
             </div>
             <DialogFooter>
-              <Button variant="hero" onClick={handleCreate}>Create plan</Button>
+              <Button variant="hero" onClick={handleCreate} disabled={create.isPending}>
+                {create.isPending ? "Creating…" : "Create plan"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
-      {plans.length === 0 ? (
-        <EmptyState onClick={() => setOpen(true)} />
+      {plans.length > 0 && (
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by country…"
+            className="pl-9"
+          />
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="rounded-2xl border border-border/60 bg-card/50 p-12 text-center text-sm text-muted-foreground">
+          Loading plans…
+        </div>
+      ) : filtered.length === 0 ? (
+        <EmptyState onClick={() => setOpen(true)} hasPlans={plans.length > 0} />
       ) : (
         <div className="grid gap-6 lg:grid-cols-2">
           <AnimatePresence>
-            {plans.map((plan) => (
-              <PlanCard key={plan.id} plan={plan} onToggle={handleToggle} onDelete={handleDelete} />
+            {filtered.map((plan) => (
+              <PlanCard
+                key={plan.id}
+                plan={plan}
+                onToggle={(itemId, done) => toggle.mutate({ itemId, done })}
+                onDelete={(id) => remove.mutate(id)}
+              />
             ))}
           </AnimatePresence>
         </div>
@@ -114,16 +183,14 @@ function PlanCard({
   onToggle,
   onDelete,
 }: {
-  plan: ExpansionPlan;
-  onToggle: (planId: string, itemId: string) => void;
+  plan: PlanWithItems;
+  onToggle: (itemId: string, done: boolean) => void;
   onDelete: (id: string) => void;
 }) {
   const country = COUNTRIES.find((c) => c.name === plan.country);
-  const completed = plan.checklist.filter((i) => i.done).length;
-  const progress = useMemo(
-    () => Math.round((completed / plan.checklist.length) * 100),
-    [completed, plan.checklist.length],
-  );
+  const items = plan.checklist_items;
+  const completed = items.filter((i) => i.done).length;
+  const progress = items.length ? Math.round((completed / items.length) * 100) : 0;
 
   return (
     <motion.div
@@ -138,7 +205,7 @@ function PlanCard({
           <h3 className="font-display text-2xl font-bold">
             <span className="mr-2">{country?.flag}</span>{plan.country}
           </h3>
-          <p className="mt-1 text-sm text-muted-foreground">{completed}/{plan.checklist.length} tasks complete</p>
+          <p className="mt-1 text-sm text-muted-foreground">{completed}/{items.length} tasks complete</p>
         </div>
         <Button variant="ghost" size="icon" onClick={() => onDelete(plan.id)} aria-label="Delete plan">
           <Trash2 className="h-4 w-4 text-muted-foreground" />
@@ -155,10 +222,10 @@ function PlanCard({
       </div>
 
       <ul className="mt-5 space-y-2">
-        {plan.checklist.map((item) => (
+        {items.map((item) => (
           <li key={item.id}>
             <button
-              onClick={() => onToggle(plan.id, item.id)}
+              onClick={() => onToggle(item.id, !item.done)}
               className={cn(
                 "group flex w-full items-start gap-3 rounded-lg border border-transparent p-2 text-left transition-colors hover:bg-muted/50",
                 item.done && "opacity-60",
@@ -181,15 +248,21 @@ function PlanCard({
   );
 }
 
-function EmptyState({ onClick }: { onClick: () => void }) {
+function EmptyState({ onClick, hasPlans }: { onClick: () => void; hasPlans: boolean }) {
   return (
     <div className="rounded-2xl border border-dashed border-border bg-card/50 p-12 text-center">
       <div className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-primary text-primary-foreground shadow-elegant">
         <Plus className="h-5 w-5" />
       </div>
-      <h3 className="mt-4 font-display text-xl font-semibold">No plans yet</h3>
-      <p className="mt-1 text-sm text-muted-foreground">Pick your first target market to start your launch checklist.</p>
-      <Button variant="hero" className="mt-6" onClick={onClick}>Create your first plan</Button>
+      <h3 className="mt-4 font-display text-xl font-semibold">
+        {hasPlans ? "No matches" : "No plans yet"}
+      </h3>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {hasPlans ? "Try a different search." : "Pick your first target market to start your launch checklist."}
+      </p>
+      {!hasPlans && (
+        <Button variant="hero" className="mt-6" onClick={onClick}>Create your first plan</Button>
+      )}
     </div>
   );
 }
