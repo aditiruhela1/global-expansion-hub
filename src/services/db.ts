@@ -1,9 +1,7 @@
 // Generic Supabase data-access layer.
-// Type-safe over the Database schema; falls back to a string for ad-hoc tables.
 import { supabase } from "@/lib/supabase";
-import type { Database } from "@/lib/database.types";
 
-type TableName = keyof Database["public"]["Tables"];
+type TableName = string;
 
 export type ListOptions = {
   select?: string;
