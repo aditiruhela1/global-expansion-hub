@@ -56,7 +56,8 @@ const Auth = () => {
       }
       navigate("/dashboard");
     } catch (err) {
-      toast.error("Something went wrong. Try again.");
+      const msg = err instanceof Error ? err.message : "Something went wrong. Try again.";
+      toast.error(msg);
     } finally {
       setLoading(false);
     }

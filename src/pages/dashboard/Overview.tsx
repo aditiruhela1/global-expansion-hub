@@ -1,26 +1,29 @@
 import { motion } from "framer-motion";
 import { ArrowRight, Globe2, ListChecks, TrendingUp } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { getBusiness, getPaymentProviders, getPlans } from "@/services/api";
-import type { ExpansionPlan, PaymentProvider } from "@/utils/types";
+import { listPlans } from "@/services/plans";
+import { listProviders } from "@/services/payments";
+import { getMyBusiness } from "@/services/business";
 
 export default function Overview() {
   const { user } = useAuth();
-  const [plans, setPlans] = useState<ExpansionPlan[]>([]);
-  const [providers, setProviders] = useState<PaymentProvider[]>([]);
-  const business = getBusiness();
+  const fullName = (user?.user_metadata as { full_name?: string } | undefined)?.full_name;
 
-  useEffect(() => {
-    setPlans(getPlans());
-    setProviders(getPaymentProviders());
-    document.title = "Dashboard — GlobeNest";
-  }, []);
+  const { data: plans = [] } = useQuery({ queryKey: ["plans"], queryFn: listPlans });
+  const { data: providers = [] } = useQuery({ queryKey: ["providers"], queryFn: listProviders });
+  const { data: business } = useQuery({ queryKey: ["business"], queryFn: getMyBusiness });
 
-  const totalItems = plans.reduce((sum, p) => sum + p.checklist.length, 0);
-  const doneItems = plans.reduce((sum, p) => sum + p.checklist.filter((i) => i.done).length, 0);
+  useEffect(() => { document.title = "Dashboard — GlobeNest"; }, []);
+
+  const totalItems = plans.reduce((sum, p) => sum + p.checklist_items.length, 0);
+  const doneItems = plans.reduce(
+    (sum, p) => sum + p.checklist_items.filter((i) => i.done).length,
+    0,
+  );
   const completion = totalItems ? Math.round((doneItems / totalItems) * 100) : 0;
   const connected = providers.filter((p) => p.connected).length;
 
@@ -34,7 +37,7 @@ export default function Overview() {
     <div className="space-y-8">
       <div>
         <h1 className="font-display text-3xl font-bold">
-          Welcome back, {user?.fullName?.split(" ")[0] ?? "founder"} 👋
+          Welcome back, {fullName?.split(" ")[0] ?? "founder"} 👋
         </h1>
         <p className="mt-1 text-muted-foreground">
           {business ? `Operating ${business.name} from ${business.country}.` : "Set up your business to get started."}
