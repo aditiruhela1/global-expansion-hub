@@ -2,12 +2,24 @@ import { motion } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import heroBg from "@/assets/hero-bg.png";
 
 export function Hero() {
   return (
     <section className="relative overflow-hidden">
+      {/* Hero background image */}
+      <div className="absolute inset-0 -z-20" aria-hidden>
+        <img
+          src={heroBg}
+          alt=""
+          className="h-full w-full object-cover opacity-25 dark:opacity-30"
+          loading="eager"
+          decoding="async"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-background/70 via-background/85 to-background" />
+      </div>
       {/* Mesh background */}
-      <div className="absolute inset-0 bg-hero-mesh" aria-hidden />
+      <div className="absolute inset-0 -z-10 bg-hero-mesh" aria-hidden />
       <div className="absolute inset-x-0 top-0 -z-10 h-[600px] bg-gradient-to-b from-primary/5 to-transparent" aria-hidden />
 
       <div className="container relative pt-20 pb-24 md:pt-32 md:pb-32">
